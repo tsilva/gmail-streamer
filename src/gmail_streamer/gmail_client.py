@@ -1,8 +1,14 @@
 import base64
+from datetime import datetime, timezone
 
 
-def search_messages(service, query: str) -> list[str]:
-    """Return all message IDs matching the query."""
+def search_messages(service, query: str, after_date: str | None = None) -> list[str]:
+    """Return all message IDs matching the query.
+
+    If after_date (YYYY-MM-DD) is provided, appends 'after:{date}' to narrow results.
+    """
+    if after_date:
+        query = f"{query} after:{after_date}"
     ids = []
     request = service.users().messages().list(userId="me", q=query)
     while request:
@@ -17,6 +23,28 @@ def fetch_raw_message(service, msg_id: str) -> bytes:
     """Fetch the full RFC 2822 message as bytes."""
     msg = service.users().messages().get(userId="me", id=msg_id, format="raw").execute()
     return base64.urlsafe_b64decode(msg["raw"])
+
+
+def fetch_message_metadata(service, msg_id: str) -> dict:
+    """Fetch message metadata and return a dict with key fields."""
+    msg = service.users().messages().get(
+        userId="me", id=msg_id, format="metadata",
+        metadataHeaders=["From", "To", "Subject", "Date"],
+    ).execute()
+
+    headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
+    internal_ts = int(msg.get("internalDate", "0")) / 1000
+    internal_date = datetime.fromtimestamp(internal_ts, tz=timezone.utc).strftime("%Y-%m-%d")
+
+    return {
+        "id": msg_id,
+        "date": internal_date,
+        "subject": headers.get("Subject", ""),
+        "from": headers.get("From", ""),
+        "to": headers.get("To", ""),
+        "snippet": msg.get("snippet", ""),
+        "label_ids": msg.get("labelIds", []),
+    }
 
 
 def fetch_attachments(service, msg_id: str) -> list[dict]:
