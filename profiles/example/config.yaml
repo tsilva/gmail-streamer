@@ -1,0 +1,3 @@
+filter: "from:example@gmail.com has:attachment"
+target_directory: "./downloads"
+mode: "full"
