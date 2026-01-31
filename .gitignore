@@ -4,8 +4,10 @@ dist/
 build/
 *.pyc
 .venv/
-profiles/*/token.json
-profiles/*/state.json
-profiles/*/credentials.json
+profiles/*/
+!profiles/example/
+profiles/example/token.json
+profiles/example/state.json
+profiles/example/credentials.json
 
 logs/
