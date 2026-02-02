@@ -1,7 +1,16 @@
 [project]
 name = "gmail-streamer"
 version = "0.1.0"
+description = "CLI tool to download Gmail messages matching configurable filters via OAuth2"
+authors = [{ name = "Tiago Silva" }]
+license = { text = "MIT" }
+readme = "README.md"
 requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
 dependencies = [
     "google-api-python-client",
     "google-auth-oauthlib",
@@ -12,6 +21,10 @@ dependencies = [
 
 [project.scripts]
 gmail-streamer = "gmail_streamer.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/tsilva/gmail-streamer"
+Repository = "https://github.com/tsilva/gmail-streamer"
 
 [build-system]
 requires = ["hatchling"]

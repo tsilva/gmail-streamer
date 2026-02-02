@@ -14,11 +14,10 @@ from gmail_streamer.storage import save_attachments, save_eml, save_metadata, sc
 
 
 @click.command()
-@click.option("--profile", required=True, help="Profile name")
-@click.option("--profile-dir", default="./profiles", help="Base directory for profiles")
-def main(profile: str, profile_dir: str):
+@click.option("--profile", required=True, type=click.Path(exists=True, file_okay=False, resolve_path=True), help="Path to profile directory")
+def main(profile: str):
     """Download Gmail messages matching a profile's filter."""
-    profile_path = Path(profile_dir) / profile
+    profile_path = Path(profile)
     if not profile_path.is_dir():
         raise click.ClickException(f"Profile directory not found: {profile_path}")
 
