@@ -1,0 +1,19 @@
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - pyproject.toml
+      - src/gmail_streamer/__init__.py
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  release:
+    uses: tsilva/.github/.github/workflows/release.yml@main
+    with:
+      publish_to_pypi: true
+    secrets: inherit

@@ -2,6 +2,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+src/gmail_streamer/_build_info.py
 *.pyc
 .venv/
 profiles/*/
