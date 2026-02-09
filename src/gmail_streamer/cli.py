@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import click
+import yaml
 
 from gmail_streamer.auth import get_gmail_service
 from gmail_streamer.config import load_config
@@ -10,14 +11,33 @@ from gmail_streamer.gmail_client import (
     fetch_raw_message,
     search_messages,
 )
+from gmail_streamer.paths import get_profiles_dir, list_profiles, resolve_profile
 from gmail_streamer.storage import save_attachments, save_eml, save_metadata, scan_downloaded_metadata
 
 
-@click.command()
-@click.option("--profile", required=True, type=click.Path(exists=True, file_okay=False, resolve_path=True), help="Path to profile directory")
-def main(profile: str):
-    """Download Gmail messages matching a profile's filter."""
-    profile_path = Path(profile)
+@click.group()
+@click.option(
+    "--profile-dir",
+    envvar="GMAIL_STREAMER_PROFILE_DIR",
+    default=None,
+    type=click.Path(file_okay=False),
+    help="Override profiles directory.",
+)
+@click.pass_context
+def main(ctx, profile_dir):
+    """Download Gmail messages matching configurable filters."""
+    ctx.ensure_object(dict)
+    ctx.obj["profiles_dir"] = get_profiles_dir(profile_dir)
+
+
+@main.command()
+@click.argument("profile")
+@click.pass_context
+def run(ctx, profile):
+    """Download messages for a profile."""
+    profiles_dir = ctx.obj["profiles_dir"]
+    profile_path = resolve_profile(profile, profiles_dir)
+
     if not profile_path.is_dir():
         raise click.ClickException(f"Profile directory not found: {profile_path}")
 
@@ -25,7 +45,7 @@ def main(profile: str):
     target = Path(config.target_directory)
     target.mkdir(parents=True, exist_ok=True)
 
-    click.echo(f"Authenticating profile '{profile}'...")
+    click.echo(f"Authenticating profile '{profile_path.name}'...")
     service = get_gmail_service(profile_path)
 
     downloaded_ids, most_recent_date = scan_downloaded_metadata(target)
@@ -60,3 +80,66 @@ def main(profile: str):
         save_metadata(target, msg_id, date, metadata)
 
     click.echo("Done.")
+
+
+@main.group("profiles")
+def profiles_group():
+    """Manage profiles."""
+
+
+@profiles_group.command("list")
+@click.pass_context
+def profiles_list(ctx):
+    """List available profiles."""
+    profiles_dir = ctx.obj["profiles_dir"]
+    names = list_profiles(profiles_dir)
+    if not names:
+        click.echo(f"No profiles found in {profiles_dir}")
+        return
+    click.echo(f"Profiles in {profiles_dir}:\n")
+    for name in names:
+        click.echo(f"  {name}")
+
+
+@profiles_group.command("init")
+@click.argument("name")
+@click.pass_context
+def profiles_init(ctx, name):
+    """Scaffold a new profile directory with a template config."""
+    profiles_dir = ctx.obj["profiles_dir"]
+    profile_dir = profiles_dir / name
+
+    if profile_dir.exists():
+        raise click.ClickException(f"Profile already exists: {profile_dir}")
+
+    profile_dir.mkdir(parents=True)
+    config = {
+        "filter": 'from:example@gmail.com has:attachment',
+        "target_directory": "./downloads",
+        "mode": "full",
+    }
+    (profile_dir / "config.yaml").write_text(yaml.dump(config, default_flow_style=False))
+    click.echo(f"Created profile at {profile_dir}")
+    click.echo("Next steps:")
+    click.echo(f"  1. Edit {profile_dir / 'config.yaml'} with your filter")
+    click.echo(f"  2. Copy your credentials.json into {profile_dir}")
+    click.echo(f"  3. Run: gmail-streamer run {name}")
+
+
+@profiles_group.command("show")
+@click.argument("name")
+@click.pass_context
+def profiles_show(ctx, name):
+    """Show a profile's configuration."""
+    profiles_dir = ctx.obj["profiles_dir"]
+    profile_path = resolve_profile(name, profiles_dir)
+
+    if not profile_path.is_dir():
+        raise click.ClickException(f"Profile not found: {profile_path}")
+
+    config_file = profile_path / "config.yaml"
+    if not config_file.exists():
+        raise click.ClickException(f"No config.yaml in {profile_path}")
+
+    click.echo(f"Profile: {profile_path.name} ({profile_path})\n")
+    click.echo(config_file.read_text())

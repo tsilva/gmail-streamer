@@ -21,4 +21,8 @@ def load_config(profile_dir: Path) -> ProfileConfig:
         raise FileNotFoundError(f"Config not found: {config_path}")
     with open(config_path) as f:
         data = yaml.safe_load(f)
-    return ProfileConfig(**data)
+    config = ProfileConfig(**data)
+    target = Path(config.target_directory)
+    if not target.is_absolute():
+        config.target_directory = str((profile_dir / target).resolve())
+    return config
