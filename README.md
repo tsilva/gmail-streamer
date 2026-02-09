@@ -16,16 +16,22 @@
 - **📎 Attachments-only mode** — grab just the attachments, skip the rest
 - **🧠 Incremental downloads** — remembers what's already been downloaded, no duplicates across runs
 - **🔍 Gmail search filters** — use any Gmail search query (`from:`, `has:attachment`, `after:`, label filters, etc.)
-- **🏠 Works from anywhere** — install with `pipx` and run from any directory
+- **🏠 Works from anywhere** — install globally with `uv` and run from any directory
 
 ## 🚀 Quick Start
 
 ### 1. Install
 
+From PyPI:
+
 ```bash
-pipx install gmail-streamer
-# or
 uv tool install gmail-streamer
+```
+
+Or from a local clone:
+
+```bash
+uv tool install .
 ```
 
 ### 2. Create a profile
