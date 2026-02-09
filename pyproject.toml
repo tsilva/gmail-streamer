@@ -1,6 +1,6 @@
 [project]
 name = "gmail-streamer"
-version = "0.2.0"
+version = "0.2.1"
 description = "CLI tool to download Gmail messages matching configurable filters via OAuth2"
 authors = [{ name = "Tiago Silva" }]
 license = { text = "MIT" }
