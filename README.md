@@ -22,16 +22,10 @@
 
 ### 1. Install
 
-From PyPI:
-
 ```bash
-uv tool install gmail-streamer
-```
-
-Or from a local clone:
-
-```bash
-uv tool install .
+git clone https://github.com/tsilva/gmail-streamer.git
+cd gmail-streamer
+uv tool install . --force --no-cache
 ```
 
 ### 2. Create a profile
