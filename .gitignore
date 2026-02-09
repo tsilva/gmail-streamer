@@ -11,3 +11,11 @@ profiles/example/state.json
 profiles/example/credentials.json
 
 logs/
+
+# Managed by tsilva/.github
+# Do not remove - synced automatically
+.claude/
+.env
+.env.*
+.DS_Store
+node_modules/

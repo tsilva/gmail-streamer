@@ -4,7 +4,7 @@
   [![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://python.org)
   [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-  **📬 Download Gmail messages and attachments matching custom filters — organized by profiles, powered by OAuth2**
+  **📧 Download Gmail messages matching your filters to local files 📥**
 
 </div>
 
