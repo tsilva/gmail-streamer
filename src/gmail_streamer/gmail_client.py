@@ -2,13 +2,17 @@ import base64
 from datetime import datetime, timezone
 
 
-def search_messages(service, query: str, after_date: str | None = None) -> list[str]:
+def search_messages(
+    service, query: str, after_date: str | None = None, before_date: str | None = None
+) -> list[str]:
     """Return all message IDs matching the query.
 
-    If after_date (YYYY-MM-DD) is provided, appends 'after:{date}' to narrow results.
+    If after_date/before_date (YYYY-MM-DD) are provided, appends Gmail date filters.
     """
     if after_date:
         query = f"{query} after:{after_date}"
+    if before_date:
+        query = f"{query} before:{before_date}"
     ids = []
     request = service.users().messages().list(userId="me", q=query)
     while request:

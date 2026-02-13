@@ -32,8 +32,10 @@ def main(ctx, profile_dir):
 
 @main.command()
 @click.argument("profile")
+@click.option("--from", "from_date", default=None, type=str, help="Start date (YYYY-MM-DD)")
+@click.option("--to", "to_date", default=None, type=str, help="End date (YYYY-MM-DD)")
 @click.pass_context
-def run(ctx, profile):
+def run(ctx, profile, from_date, to_date):
     """Download messages for a profile."""
     profiles_dir = ctx.obj["profiles_dir"]
     profile_path = resolve_profile(profile, profiles_dir)
@@ -48,12 +50,20 @@ def run(ctx, profile):
     click.echo(f"Authenticating profile '{profile_path.name}'...")
     service = get_gmail_service(profile_path)
 
-    downloaded_ids, most_recent_date = scan_downloaded_metadata(target)
-    if most_recent_date:
-        click.echo(f"Resuming from {most_recent_date} ({len(downloaded_ids)} already downloaded)")
+    if from_date or to_date:
+        # Explicit date range mode — ignore incremental tracking
+        downloaded_ids, _ = scan_downloaded_metadata(target, from_date=from_date, to_date=to_date)
+        click.echo(f"Date range: {from_date or 'beginning'} to {to_date or 'now'} ({len(downloaded_ids)} already downloaded)")
+        click.echo(f"Searching: {config.filter}")
+        msg_ids = search_messages(service, config.filter, after_date=from_date, before_date=to_date)
+    else:
+        # Incremental mode (existing behavior)
+        downloaded_ids, most_recent_date = scan_downloaded_metadata(target)
+        if most_recent_date:
+            click.echo(f"Resuming from {most_recent_date} ({len(downloaded_ids)} already downloaded)")
+        click.echo(f"Searching: {config.filter}")
+        msg_ids = search_messages(service, config.filter, after_date=most_recent_date)
 
-    click.echo(f"Searching: {config.filter}")
-    msg_ids = search_messages(service, config.filter, after_date=most_recent_date)
     new_ids = [mid for mid in msg_ids if mid not in downloaded_ids]
     click.echo(f"Found {len(msg_ids)} messages, {len(new_ids)} new.")
 
