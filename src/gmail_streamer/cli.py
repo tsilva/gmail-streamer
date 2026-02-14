@@ -64,7 +64,7 @@ def run(ctx, profile, from_date, to_date):
         click.echo(f"Searching: {config.filter}")
         msg_ids = search_messages(service, config.filter, after_date=most_recent_date)
 
-    new_ids = [mid for mid in msg_ids if mid not in downloaded_ids]
+    new_ids = [mid for mid in msg_ids if mid[:8] not in downloaded_ids]
     click.echo(f"Found {len(msg_ids)} messages, {len(new_ids)} new.")
 
     for i, msg_id in enumerate(new_ids, 1):
@@ -72,22 +72,23 @@ def run(ctx, profile, from_date, to_date):
 
         metadata = fetch_message_metadata(service, msg_id)
         date = metadata["date"]
+        subject = metadata.get("subject", "")
 
         if config.mode == "full":
             raw = fetch_raw_message(service, msg_id)
-            save_eml(target, msg_id, date, raw)
+            save_eml(target, msg_id, date, subject, raw)
             attachments = fetch_attachments(service, msg_id)
             if attachments:
-                save_attachments(target, msg_id, date, attachments)
+                save_attachments(target, msg_id, date, subject, attachments)
 
         elif config.mode == "attachments_only":
             attachments = fetch_attachments(service, msg_id)
             if attachments:
-                save_attachments(target, msg_id, date, attachments)
+                save_attachments(target, msg_id, date, subject, attachments)
             else:
                 click.echo(f"  No attachments for {msg_id}")
 
-        save_metadata(target, msg_id, date, metadata)
+        save_metadata(target, msg_id, date, subject, metadata)
 
     click.echo("Done.")
 

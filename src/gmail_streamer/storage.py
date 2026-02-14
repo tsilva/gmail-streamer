@@ -1,4 +1,6 @@
 import json
+import re
+import unicodedata
 from pathlib import Path
 
 
@@ -6,37 +8,54 @@ def _short_id(msg_id: str) -> str:
     return msg_id[:8]
 
 
+def _slugify(text: str) -> str:
+    """Convert text to a filesystem-safe slug."""
+    text = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    text = text.lower()
+    text = re.sub(r"[^a-z0-9]+", "-", text)
+    text = text.strip("-")
+    if not text:
+        return "no-subject"
+    if len(text) > 60:
+        truncated = text[:60].rsplit("-", 1)[0]
+        text = truncated if truncated else text[:60]
+    return text
+
+
 def _month_dir(target_dir: Path, date: str) -> Path:
     """Return target_dir/YYYY-MM for a YYYY-MM-DD date string."""
     return target_dir / date[:7]
 
 
-def save_eml(target_dir: Path, msg_id: str, date: str, raw: bytes):
-    """Save .eml file with date and short ID in a YYYY-MM subfolder."""
-    dest = _month_dir(target_dir, date)
+def _message_dir(target_dir: Path, msg_id: str, date: str, subject: str) -> Path:
+    """Return per-message directory: target_dir/YYYY-MM/YYYY-MM-DD - slug - short_id."""
+    return _month_dir(target_dir, date) / f"{date} - {_slugify(subject)} - {_short_id(msg_id)}"
+
+
+def save_eml(target_dir: Path, msg_id: str, date: str, subject: str, raw: bytes):
+    """Save message.eml inside a per-message directory."""
+    dest = _message_dir(target_dir, msg_id, date, subject)
     dest.mkdir(parents=True, exist_ok=True)
-    (dest / f"{date} - {_short_id(msg_id)}.eml").write_bytes(raw)
+    (dest / "message.eml").write_bytes(raw)
 
 
-def save_metadata(target_dir: Path, msg_id: str, date: str, metadata: dict):
-    """Save metadata JSON with date and short ID in a YYYY-MM subfolder."""
-    dest = _month_dir(target_dir, date)
+def save_metadata(target_dir: Path, msg_id: str, date: str, subject: str, metadata: dict):
+    """Save metadata.json inside a per-message directory."""
+    dest = _message_dir(target_dir, msg_id, date, subject)
     dest.mkdir(parents=True, exist_ok=True)
-    path = dest / f"{date} - {_short_id(msg_id)}.json"
-    path.write_text(json.dumps(metadata, indent=2, ensure_ascii=False))
+    (dest / "metadata.json").write_text(json.dumps(metadata, indent=2, ensure_ascii=False))
 
 
-def save_attachments(target_dir: Path, msg_id: str, date: str, attachments: list[dict]):
-    """Save attachments in a YYYY-MM subfolder with date and short ID."""
-    dest = _month_dir(target_dir, date)
+def save_attachments(target_dir: Path, msg_id: str, date: str, subject: str, attachments: list[dict]):
+    """Save attachments inside a per-message directory."""
+    dest = _message_dir(target_dir, msg_id, date, subject)
     dest.mkdir(parents=True, exist_ok=True)
-    sid = _short_id(msg_id)
     for att in attachments:
-        (dest / f"{date} - {sid} - {att['filename']}").write_bytes(att["data"])
+        (dest / att["filename"]).write_bytes(att["data"])
 
 
-def _scan_json_files(glob_iter, downloaded_ids: set[str], most_recent_date: str | None) -> str | None:
-    """Parse metadata JSON files and accumulate IDs and most recent date."""
+def _scan_legacy_json_files(glob_iter, downloaded_ids: set[str], most_recent_date: str | None) -> str | None:
+    """Parse old flat metadata JSON files for backward compat. Extracts short IDs."""
     for meta_path in glob_iter:
         try:
             meta = json.loads(meta_path.read_text())
@@ -45,7 +64,7 @@ def _scan_json_files(glob_iter, downloaded_ids: set[str], most_recent_date: str 
         msg_id = meta.get("id")
         date = meta.get("date")
         if msg_id:
-            downloaded_ids.add(msg_id)
+            downloaded_ids.add(_short_id(msg_id))
         if date and (most_recent_date is None or date > most_recent_date):
             most_recent_date = date
     return most_recent_date
@@ -54,31 +73,44 @@ def _scan_json_files(glob_iter, downloaded_ids: set[str], most_recent_date: str 
 def scan_downloaded_metadata(
     target_dir: Path, from_date: str | None = None, to_date: str | None = None
 ) -> tuple[set[str], str | None]:
-    """Scan metadata JSON files to derive downloaded IDs and most recent date.
+    """Scan for downloaded messages by directory names and legacy JSON files.
 
-    Scans both flat files in target_dir (backward compat) and YYYY-MM subdirectories.
-    If from_date/to_date are provided, only YYYY-MM folders overlapping the range are scanned.
-
-    Returns (downloaded_ids, most_recent_date_or_none).
+    Returns (set of short IDs, most_recent_date_or_none).
     """
     downloaded_ids: set[str] = set()
     most_recent_date: str | None = None
 
-    # Scan flat files in root (backward compat with pre-YYYY-MM files)
-    most_recent_date = _scan_json_files(target_dir.glob("* - *.json"), downloaded_ids, most_recent_date)
-
-    # Scan YYYY-MM subdirectories
     if not target_dir.is_dir():
         return downloaded_ids, most_recent_date
 
-    for subdir in sorted(target_dir.iterdir()):
-        if not subdir.is_dir() or len(subdir.name) != 7:
+    # Scan flat legacy JSON files in root (backward compat with pre-YYYY-MM layout)
+    most_recent_date = _scan_legacy_json_files(target_dir.glob("* - *.json"), downloaded_ids, most_recent_date)
+
+    # Scan YYYY-MM subdirectories
+    for month_dir in sorted(target_dir.iterdir()):
+        if not month_dir.is_dir() or len(month_dir.name) != 7:
             continue
-        folder_month = subdir.name
+        folder_month = month_dir.name
         if from_date and folder_month < from_date[:7]:
             continue
         if to_date and folder_month > to_date[:7]:
             continue
-        most_recent_date = _scan_json_files(subdir.glob("* - *.json"), downloaded_ids, most_recent_date)
+
+        # Scan legacy flat JSON files in month dir
+        most_recent_date = _scan_legacy_json_files(month_dir.glob("* - *.json"), downloaded_ids, most_recent_date)
+
+        # Scan per-message directories (new layout)
+        for msg_dir in month_dir.iterdir():
+            if not msg_dir.is_dir():
+                continue
+            # Extract short ID from last segment: "YYYY-MM-DD - slug - {short_id}"
+            parts = msg_dir.name.rsplit(" - ", 1)
+            if len(parts) != 2:
+                continue
+            short_id = parts[1]
+            date = msg_dir.name[:10]
+            downloaded_ids.add(short_id)
+            if date and (most_recent_date is None or date > most_recent_date):
+                most_recent_date = date
 
     return downloaded_ids, most_recent_date
