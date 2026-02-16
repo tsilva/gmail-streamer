@@ -1,7 +1,10 @@
 import json
+import logging
 import re
 import unicodedata
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def _short_id(msg_id: str) -> str:
@@ -32,26 +35,57 @@ def _message_dir(target_dir: Path, msg_id: str, date: str, subject: str) -> Path
     return _month_dir(target_dir, date) / f"{date} - {_slugify(subject)} - {_short_id(msg_id)}"
 
 
+def _unique_path(dest: Path, filename: str) -> Path:
+    """Return a unique file path, appending (1), (2), etc. if needed."""
+    path = dest / filename
+    if not path.exists():
+        return path
+    stem = Path(filename).stem
+    suffix = Path(filename).suffix
+    counter = 1
+    while True:
+        candidate = dest / f"{stem} ({counter}){suffix}"
+        if not candidate.exists():
+            return candidate
+        counter += 1
+
+
 def save_eml(target_dir: Path, msg_id: str, date: str, subject: str, raw: bytes):
     """Save message.eml inside a per-message directory."""
     dest = _message_dir(target_dir, msg_id, date, subject)
-    dest.mkdir(parents=True, exist_ok=True)
-    (dest / "message.eml").write_bytes(raw)
+    try:
+        dest.mkdir(parents=True, exist_ok=True)
+        logger.debug("Saving message.eml to %s", dest)
+        (dest / "message.eml").write_bytes(raw)
+    except OSError as e:
+        raise OSError(f"Failed to save .eml for message {msg_id} to {dest}: {e}") from e
 
 
 def save_metadata(target_dir: Path, msg_id: str, date: str, subject: str, metadata: dict):
     """Save metadata.json inside a per-message directory."""
     dest = _message_dir(target_dir, msg_id, date, subject)
-    dest.mkdir(parents=True, exist_ok=True)
-    (dest / "metadata.json").write_text(json.dumps(metadata, indent=2, ensure_ascii=False))
+    try:
+        dest.mkdir(parents=True, exist_ok=True)
+        logger.debug("Saving metadata.json to %s", dest)
+        (dest / "metadata.json").write_text(json.dumps(metadata, indent=2, ensure_ascii=False))
+    except OSError as e:
+        raise OSError(f"Failed to save metadata for message {msg_id} to {dest}: {e}") from e
 
 
 def save_attachments(target_dir: Path, msg_id: str, date: str, subject: str, attachments: list[dict]):
     """Save attachments inside a per-message directory."""
     dest = _message_dir(target_dir, msg_id, date, subject)
-    dest.mkdir(parents=True, exist_ok=True)
+    try:
+        dest.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise OSError(f"Failed to create directory for attachments of message {msg_id}: {e}") from e
     for att in attachments:
-        (dest / att["filename"]).write_bytes(att["data"])
+        filepath = _unique_path(dest, att["filename"])
+        try:
+            logger.debug("Saving attachment %s", filepath)
+            filepath.write_bytes(att["data"])
+        except OSError as e:
+            raise OSError(f"Failed to save attachment '{att['filename']}' for message {msg_id}: {e}") from e
 
 
 def _scan_legacy_json_files(glob_iter, downloaded_ids: set[str], most_recent_date: str | None) -> str | None:

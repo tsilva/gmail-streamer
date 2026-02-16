@@ -1,3 +1,5 @@
+import logging
+import re
 from pathlib import Path
 
 import click
@@ -14,6 +16,21 @@ from gmail_streamer.gmail_client import (
 from gmail_streamer.paths import get_profiles_dir, list_profiles, resolve_profile
 from gmail_streamer.storage import save_attachments, save_eml, save_metadata, scan_downloaded_metadata
 
+logger = logging.getLogger(__name__)
+
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _validate_date(value: str | None, param_name: str):
+    """Validate a YYYY-MM-DD date string."""
+    if value is None:
+        return
+    if not _DATE_RE.match(value):
+        raise click.BadParameter(
+            f"Invalid date '{value}'. Expected format: YYYY-MM-DD",
+            param_hint=f"'--{param_name}'",
+        )
+
 
 @click.group()
 @click.option(
@@ -23,9 +40,14 @@ from gmail_streamer.storage import save_attachments, save_eml, save_metadata, sc
     type=click.Path(file_okay=False),
     help="Override profiles directory.",
 )
+@click.option("--verbose", "-v", is_flag=True, default=False, help="Enable debug logging.")
 @click.pass_context
-def main(ctx, profile_dir):
+def main(ctx, profile_dir, verbose):
     """Download Gmail messages matching configurable filters."""
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.WARNING,
+        format="%(levelname)s: %(message)s",
+    )
     ctx.ensure_object(dict)
     ctx.obj["profiles_dir"] = get_profiles_dir(profile_dir)
 
@@ -37,6 +59,9 @@ def main(ctx, profile_dir):
 @click.pass_context
 def run(ctx, profile, from_date, to_date):
     """Download messages for a profile."""
+    _validate_date(from_date, "from")
+    _validate_date(to_date, "to")
+
     profiles_dir = ctx.obj["profiles_dir"]
     profile_path = resolve_profile(profile, profiles_dir)
 
@@ -67,30 +92,47 @@ def run(ctx, profile, from_date, to_date):
     new_ids = [mid for mid in msg_ids if mid[:8] not in downloaded_ids]
     click.echo(f"Found {len(msg_ids)} messages, {len(new_ids)} new.")
 
+    successes = 0
+    failures = 0
+
     for i, msg_id in enumerate(new_ids, 1):
         click.echo(f"[{i}/{len(new_ids)}] Downloading {msg_id}...")
 
-        metadata = fetch_message_metadata(service, msg_id)
-        date = metadata["date"]
-        subject = metadata.get("subject", "")
+        try:
+            metadata = fetch_message_metadata(service, msg_id)
+            date = metadata["date"]
+            subject = metadata.get("subject", "")
 
-        if config.mode == "full":
-            raw = fetch_raw_message(service, msg_id)
-            save_eml(target, msg_id, date, subject, raw)
-            attachments = fetch_attachments(service, msg_id)
-            if attachments:
-                save_attachments(target, msg_id, date, subject, attachments)
+            if config.mode == "full":
+                raw = fetch_raw_message(service, msg_id)
+                save_eml(target, msg_id, date, subject, raw)
+                attachments = fetch_attachments(service, msg_id)
+                if attachments:
+                    save_attachments(target, msg_id, date, subject, attachments)
 
-        elif config.mode == "attachments_only":
-            attachments = fetch_attachments(service, msg_id)
-            if attachments:
-                save_attachments(target, msg_id, date, subject, attachments)
-            else:
-                click.echo(f"  No attachments for {msg_id}")
+            elif config.mode == "attachments_only":
+                attachments = fetch_attachments(service, msg_id)
+                if attachments:
+                    save_attachments(target, msg_id, date, subject, attachments)
+                else:
+                    click.echo(f"  No attachments for {msg_id}")
 
-        save_metadata(target, msg_id, date, subject, metadata)
+            save_metadata(target, msg_id, date, subject, metadata)
+            successes += 1
 
-    click.echo("Done.")
+        except Exception as e:
+            failures += 1
+            logger.debug("Error processing message %s", msg_id, exc_info=True)
+            click.echo(f"  Failed: {e}", err=True)
+
+    total = successes + failures
+    if total > 0:
+        click.echo(f"Done. Downloaded {successes}/{total}, {failures} failed.")
+    else:
+        click.echo("Done. No new messages to download.")
+
+    if total > 0 and successes == 0:
+        ctx.exit(1)
 
 
 @main.group("profiles")
