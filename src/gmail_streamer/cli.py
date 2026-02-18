@@ -1,5 +1,7 @@
+import json
 import logging
 import re
+import shutil
 from pathlib import Path
 
 import click
@@ -158,25 +160,73 @@ def profiles_list(ctx):
 @click.argument("name")
 @click.pass_context
 def profiles_init(ctx, name):
-    """Scaffold a new profile directory with a template config."""
+    """Interactively create and authenticate a new profile."""
     profiles_dir = ctx.obj["profiles_dir"]
     profile_dir = profiles_dir / name
 
     if profile_dir.exists():
         raise click.ClickException(f"Profile already exists: {profile_dir}")
 
+    click.echo(f"\nCreating profile '{name}'\n")
+
+    # Step 1 — Config prompts
+    filter_query = click.prompt("Gmail filter query", default="has:attachment")
+    default_target = str(Path.home() / "gmail-downloads" / name)
+    target_directory = click.prompt("Target directory for downloads", default=default_target)
+    mode = click.prompt(
+        "Download mode",
+        type=click.Choice(["full", "attachments_only"]),
+        default="full",
+    )
+
     profile_dir.mkdir(parents=True)
     config = {
-        "filter": 'from:example@gmail.com has:attachment',
-        "target_directory": "./downloads",
-        "mode": "full",
+        "filter": filter_query,
+        "target_directory": target_directory,
+        "mode": mode,
     }
     (profile_dir / "config.yaml").write_text(yaml.dump(config, default_flow_style=False))
-    click.echo(f"Created profile at {profile_dir}")
-    click.echo("Next steps:")
-    click.echo(f"  1. Edit {profile_dir / 'config.yaml'} with your filter")
-    click.echo(f"  2. Copy your credentials.json into {profile_dir}")
-    click.echo(f"  3. Run: gmail-streamer run {name}")
+
+    # Step 2 — Credentials setup
+    click.echo(
+        "\nNext, you need a Google OAuth credentials file.\n"
+        "Follow the guide to create one:\n"
+        "  https://github.com/tsilva/gmail-streamer/blob/main/docs/credentials-guide.md\n"
+    )
+    creds_src = click.prompt("Path to your downloaded credentials.json")
+    creds_src_path = Path(creds_src).expanduser().resolve()
+
+    if not creds_src_path.exists():
+        raise click.ClickException(f"File not found: {creds_src_path}")
+
+    try:
+        creds_data = json.loads(creds_src_path.read_text())
+        if not ("installed" in creds_data or "web" in creds_data):
+            raise click.ClickException(
+                "Invalid credentials.json: missing 'installed' or 'web' key. "
+                "Make sure you downloaded an OAuth 2.0 Client ID (not a service account)."
+            )
+    except json.JSONDecodeError as e:
+        raise click.ClickException(f"credentials.json is not valid JSON: {e}")
+
+    shutil.copy2(creds_src_path, profile_dir / "credentials.json")
+    click.echo("Credentials copied.")
+
+    # Step 3 — OAuth flow
+    click.echo("\nOpening browser for Google authorization...")
+    try:
+        get_gmail_service(profile_dir)
+        click.echo("Authentication complete.")
+    except Exception as e:
+        raise click.ClickException(f"OAuth flow failed: {e}")
+
+    # Step 4 — Summary
+    click.echo(f"\nProfile '{name}' is ready!")
+    click.echo(f"  Location : {profile_dir}")
+    click.echo(f"  Filter   : {filter_query}")
+    click.echo(f"  Output   : {target_directory}")
+    click.echo(f"  Mode     : {mode}")
+    click.echo(f"\nRun it with:\n  gmail-streamer run {name}")
 
 
 @profiles_group.command("show")

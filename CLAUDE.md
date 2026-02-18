@@ -28,8 +28,7 @@ gmail-streamer profiles show <name>              # Show profile config
 
 Profiles directory is resolved in this order:
 1. `--profile-dir` flag or `GMAIL_STREAMER_PROFILE_DIR` env var
-2. `./profiles/` in current working directory (if it exists)
-3. `~/.gmail-streamer/profiles/` (fallback)
+2. `~/.gmail-streamer/profiles/` (default)
 
 The `profile` argument to `run` can be a name (looked up in the profiles dir) or a path to an existing directory.
 

@@ -8,15 +8,11 @@ def get_profiles_dir(override: str | None = None) -> Path:
     """Return the active profiles directory.
 
     Priority:
-    1. Explicit override (--profile-dir flag)
-    2. ./profiles/ in CWD (if it exists)
-    3. ~/.gmail-streamer/profiles/ (fallback)
+    1. Explicit override (--profile-dir flag or GMAIL_STREAMER_PROFILE_DIR env var)
+    2. ~/.gmail-streamer/profiles/ (default)
     """
     if override:
         return Path(override).resolve()
-    cwd_profiles = Path.cwd() / "profiles"
-    if cwd_profiles.is_dir():
-        return cwd_profiles.resolve()
     return DEFAULT_PROFILES_DIR
 
 

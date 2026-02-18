@@ -34,48 +34,41 @@ uv tool install . --force --no-cache
 gmail-streamer profiles init my-profile
 ```
 
-This creates `~/.gmail-streamer/profiles/my-profile/` with a template `config.yaml`.
+This interactive wizard will:
+- Prompt for your Gmail filter, output directory, and download mode
+- Guide you to create OAuth credentials ([see credentials guide](docs/credentials-guide.md))
+- Copy your `credentials.json` and open a browser for Google authorization immediately
 
-### 3. Add your Gmail OAuth credentials
+Your profile is stored at `~/.gmail-streamer/profiles/my-profile/`.
 
-Place your `credentials.json` (from [Google Cloud Console](https://console.cloud.google.com/apis/credentials)) into the profile directory.
-
-### 4. Configure the profile
-
-Edit `~/.gmail-streamer/profiles/my-profile/config.yaml`:
-
-```yaml
-filter: "from:example@gmail.com has:attachment"
-target_directory: "./downloads"
-mode: "full"  # or "attachments_only"
-```
-
-### 5. Run
+### 3. Run
 
 ```bash
 gmail-streamer run my-profile
 ```
 
-On first run, a browser window opens for OAuth authorization. Subsequent runs reuse the cached token.
+Subsequent runs reuse the cached OAuth token and pick up only new messages.
 
 ## 📁 Profile Resolution
 
 The profiles directory is resolved in this order:
 
 1. `--profile-dir` flag or `GMAIL_STREAMER_PROFILE_DIR` env var
-2. `./profiles/` in the current working directory (if it exists)
-3. `~/.gmail-streamer/profiles/` (default)
+2. `~/.gmail-streamer/profiles/` (default)
 
 The `profile` argument can be a **name** (looked up in the profiles directory) or a **path** to an existing directory (backward compatible).
 
 ## 🛠️ CLI Reference
 
 ```bash
-gmail-streamer run <profile>                     # Download messages
-gmail-streamer --profile-dir /path run <profile>  # Custom profiles directory
-gmail-streamer profiles list                      # List available profiles
-gmail-streamer profiles init <name>               # Scaffold a new profile
-gmail-streamer profiles show <name>               # Show profile config
+gmail-streamer run <profile>                         # Download messages
+gmail-streamer run <profile> --from 2024-01-01       # From a start date
+gmail-streamer run <profile> --to 2024-12-31         # Up to an end date
+gmail-streamer --verbose run <profile>               # Enable debug logging
+gmail-streamer --profile-dir /path run <profile>     # Custom profiles directory
+gmail-streamer profiles list                         # List available profiles
+gmail-streamer profiles init <name>                  # Create a new profile (interactive)
+gmail-streamer profiles show <name>                  # Show profile config
 ```
 
 ## ⚙️ Profile Structure
