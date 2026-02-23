@@ -10,6 +10,8 @@
 
 ## ✨ Features
 
+[![CI](https://github.com/tsilva/gmail-streamer/actions/workflows/ci.yml/badge.svg)](https://github.com/tsilva/gmail-streamer/actions/workflows/ci.yml)
+
 - **🗂️ Profile-based configuration** — run multiple independent download profiles, each with its own filters, credentials, and output directory
 - **🔐 OAuth2 authentication** — secure Google sign-in with automatic token caching
 - **📧 Full message download** — save complete `.eml` files for archival
